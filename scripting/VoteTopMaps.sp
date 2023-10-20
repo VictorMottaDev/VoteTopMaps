@@ -54,10 +54,10 @@ Menu ContrutorMenu()
 	return menu;
 }
 
-public void gravaAvaliacao(char nota[32], char mapa[128])
+public void gravaAvaliacao(char nota[32], char mapa[128], char steamid[128])
 {
 	char query[255];
-	FormatEx(query, sizeof(query), "INSERT INTO AvaliaMapa(mapa, nota) VALUES ('%s','%s')",mapa,nota);
+	FormatEx(query, sizeof(query), "INSERT IGNORE INTO AvaliaMapa(mapa, nota, steamid) VALUES ('%s','%s','%s')",mapa,nota,steamid);
 	hDatabase.Query(T_GravaAvaliacao, query);
 }
 
@@ -69,10 +69,11 @@ public int MenuPrincipal(Menu menu, MenuAction action, int param1, int param2)
 	{
 		case MenuAction_Select:
 			{
-				char item[32];
+				char item[32],steamid[128];
 				menu.GetItem(param2, item, sizeof(item));
-				gravaAvaliacao(item,g_MapName);
-				//PrintToChatAll("votou: %s", item);
+				GetClientAuthId(param1, AuthId_Steam2, steamid, sizeof(steamid));
+				gravaAvaliacao(item,g_MapName,steamid);
+				PrintToChat(param1, "Obrigado por avaliar!");
 			}
 
 		case MenuAction_End: {}
