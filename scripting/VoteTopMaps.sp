@@ -1,14 +1,12 @@
 #include <sdkhooks>
 #include <sdktools>
 #include <sourcemod>
-#pragma newdecls required
+
 #pragma semicolon 1
 
 ConVar g_CvarAtivo = null;
-char g_MapName[128];
+char g_MapName[64];
 Database hDatabase = null;
-
-Menu g_MenuPrincipal;
 
 public Plugin myinfo =
 {
@@ -27,7 +25,19 @@ public void OnPluginStart()
 	RegConsoleCmd( "say_team", Comando_Chat);
 	AutoExecConfig(true, "sm_votetopmaps");
 	StartSQL();
-	g_MenuPrincipal = ContrutorMenu();
+	HookEvent("round_start", RoundStart);
+	HookEvent("player_spawn", PlayerSpawn);
+	GetCurrentMap(g_MapName, sizeof(g_MapName));
+}
+
+public void PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+{
+	GetCurrentMap(g_MapName, sizeof(g_MapName));
+}
+
+public void RoundStart(Event event, const char[] name, bool dontBroadcast)
+{
+	GetCurrentMap(g_MapName, sizeof(g_MapName));
 }
 
 public void OnMapStart() 
@@ -36,47 +46,61 @@ public void OnMapStart()
 	{
 		return;
 	}
-
-}
-
-Menu ContrutorMenu()
-{
 	GetCurrentMap(g_MapName, sizeof(g_MapName));
-	Menu menu = new Menu(MenuPrincipal);
-
-	menu.SetTitle("Como você avalia o mapa %s ?",g_MapName);
-	menu.AddItem("5", "MUITO TOP");
-	menu.AddItem("4", "BOM");
-	menu.AddItem("3", "ACEITAVEL");
-	menu.AddItem("2", "NORMAL");
-	menu.AddItem("1", "RUIM");
-
-	return menu;
 }
 
-public void gravaAvaliacao(char nota[32], char mapa[128], char steamid[128])
+public Action Comando_Chat(int id,int args )
+{
+	char comando[128];
+	GetCmdArgString( comando, sizeof( comando ) - 1 );
+	StripQuotes(comando);
+	TrimString(comando);
+
+	if(StrEqual(comando, "!avaliar"))
+	{
+		Handle hMenu = CreateMenu(MenuPrincipal);
+		decl String:sBuffer[255];
+		Format(sBuffer, sizeof(sBuffer), "Como você avalia o mapa %s ?",g_MapName);
+
+		SetMenuTitle(hMenu, sBuffer);
+		AddMenuItem(hMenu, "5", "MUITO TOP");
+		AddMenuItem(hMenu, "4", "BOM");
+		AddMenuItem(hMenu, "3", "ACEITAVEL");
+		AddMenuItem(hMenu, "2", "NORMAL");
+		AddMenuItem(hMenu, "1", "RUIM");
+
+		DisplayMenu(hMenu, id, MENU_TIME_FOREVER);
+	}
+	
+	return Plugin_Continue;
+}
+
+public void gravaAvaliacao(char nota[32], char mapa[64], char steamid[128])
 {
 	char query[255];
-	FormatEx(query, sizeof(query), "INSERT IGNORE INTO AvaliaMapa(mapa, nota, steamid) VALUES ('%s','%s','%s')",mapa,nota,steamid);
+	FormatEx(query, sizeof(query), "INSERT INTO AvaliaMapa (mapa, nota, steamid) VALUES ('%s', '%s', '%s')ON DUPLICATE KEY UPDATE nota = CASE WHEN VALUES(nota) <> nota THEN VALUES(nota) ELSE nota END;",mapa,nota,steamid);
 	hDatabase.Query(T_GravaAvaliacao, query);
 }
 
 public void T_GravaAvaliacao(Database db, DBResultSet results, const char[] error, any data) {}
 
-public int MenuPrincipal(Menu menu, MenuAction action, int param1, int param2)
+public int MenuPrincipal(Handle hMenu, MenuAction action, int param1, int param2)
 {
 	switch (action)
 	{
 		case MenuAction_Select:
 			{
-				char item[32],steamid[128];
-				menu.GetItem(param2, item, sizeof(item));
+				char item[32],steamid[128], temp[250];
+				GetMenuItem(hMenu, param2, item, sizeof(temp));
+
 				GetClientAuthId(param1, AuthId_Steam2, steamid, sizeof(steamid));
 				gravaAvaliacao(item,g_MapName,steamid);
-				PrintToChat(param1, "Obrigado por avaliar!");
+				PrintToChat(param1, "[CZSAVALIAMAPA] Obrigado por avaliar o mapa!");
 			}
 
-		case MenuAction_End: {}
+		case MenuAction_End: {
+			CloseHandle(hMenu);
+		}
 	}
 
 	return 0;
@@ -91,26 +115,11 @@ public void GotDatabase(Database db, const char[] error, any data)
 	else
 	{
 		hDatabase = db;
-		PrintToServer("Conectado ao DB");
+		PrintToServer("Conectado ao DB avalia mapa");
 	}
 }
 
 void StartSQL()
 {
 	Database.Connect(GotDatabase, "VoteTopMap");
-}
-
-public Action Comando_Chat(int id,int args )
-{
-	char comando[128];
-	GetCmdArgString( comando, sizeof( comando ) - 1 );
-	StripQuotes(comando);
-	TrimString(comando);
-
-	if(StrEqual(comando, "!avaliar"))
-	{
-		g_MenuPrincipal.Display(id, MENU_TIME_FOREVER);
-	}
-	
-	return Plugin_Continue;
 }
